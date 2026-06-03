@@ -1,0 +1,10 @@
+name: panda-smoke
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip
+  - pip:
+      - torch>=2.0
+      - numpy>=1.26
+      - pytest>=8.0

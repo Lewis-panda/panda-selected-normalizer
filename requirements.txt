@@ -1,0 +1,5 @@
+# Minimal smoke/test environment.
+# CPU-only installs may use the platform's matching PyTorch wheel instead.
+torch>=2.0
+numpy>=1.26
+pytest>=8.0
