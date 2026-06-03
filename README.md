@@ -8,6 +8,28 @@ The code in this draft repository is deliberately small. It is meant to help an
 external engineer understand and run the selected-normalizer boundary on random
 tensors without cloning the full research workspace.
 
+## Paper Result Figures
+
+These figures are copied from the paper artifact package. They summarize the
+reported systems evidence; they are not re-run by this lightweight GitHub
+package.
+
+### Exact Full-C C-Scaling / OOM Boundary
+
+![Exact full-C C-scaling memory/OOM boundary](figures/main_c_scaling_memory.png)
+
+### Capacity Ceiling
+
+![Capacity ceiling summary](figures/capacity_ceiling.png)
+
+### AISHELL Bounded Continuation Memory / Time
+
+![AISHELL bounded-continuation memory and time](figures/h1_smoke_memory_time.png)
+
+### Pruned RNN-T Composition
+
+![Pruned RNN-T composition memory](figures/pruned_composition_memory.png)
+
 ## What PANDA Is
 
 For each site `i`, PANDA computes selected log-probabilities such as blank and
@@ -23,25 +45,6 @@ The denominator is exact over the full `C` classes. The smoke implementation
 scans `C` in tiles and recomputes tile logits in backward. It does not keep
 persistent full logits `[N,C]` and does not keep persistent full
 `grad_logits[N,C]`.
-
-```mermaid
-flowchart LR
-  H["hidden sites<br/>[N,H]"] --> Tile["tile over output classes<br/>C = vocabulary size"]
-  W["output head<br/>W [C,H], b [C]"] --> Tile
-  Tile --> Z["exact full-C logZ<br/>logsumexp over all C"]
-  Tile --> Sel["selected logits<br/>target / blank / other selected ids"]
-  Z --> LogP["selected log-probs<br/>logp_i[s] = z_i,s - logZ_i"]
-  Sel --> LogP
-  LogP --> DP["structured loss / DP side<br/>compact selected adjoints"]
-  DP --> Backward["tile-local backward recomputation"]
-  Z --> Backward
-  Backward --> GH["grad_hidden [N,H]"]
-  Backward --> GW["grad_weight [C,H]"]
-  Backward --> GB["grad_bias [C]"]
-```
-
-This diagram is a boundary schematic. It is not a benchmark and it does not
-claim a production/default backend.
 
 ## What PANDA Is Not
 
