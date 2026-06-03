@@ -24,6 +24,25 @@ scans `C` in tiles and recomputes tile logits in backward. It does not keep
 persistent full logits `[N,C]` and does not keep persistent full
 `grad_logits[N,C]`.
 
+```mermaid
+flowchart LR
+  H["hidden sites<br/>[N,H]"] --> Tile["tile over output classes<br/>C = vocabulary size"]
+  W["output head<br/>W [C,H], b [C]"] --> Tile
+  Tile --> Z["exact full-C logZ<br/>logsumexp over all C"]
+  Tile --> Sel["selected logits<br/>target / blank / other selected ids"]
+  Z --> LogP["selected log-probs<br/>logp_i[s] = z_i,s - logZ_i"]
+  Sel --> LogP
+  LogP --> DP["structured loss / DP side<br/>compact selected adjoints"]
+  DP --> Backward["tile-local backward recomputation"]
+  Z --> Backward
+  Backward --> GH["grad_hidden [N,H]"]
+  Backward --> GW["grad_weight [C,H]"]
+  Backward --> GB["grad_bias [C]"]
+```
+
+This diagram is a boundary schematic. It is not a benchmark and it does not
+claim a production/default backend.
+
 ## What PANDA Is Not
 
 This package is not a production/default ASR backend. It does not claim ASR
@@ -114,6 +133,17 @@ The smoke scripts print:
 The dense oracle intentionally materializes `[N,C]` logits and uses PyTorch
 autograd. The PANDA path uses tile-local logits and a manual compact-adjoint
 backward.
+
+### Smoke Result Snapshot
+
+These are representative small-shape parity checks from the package smoke
+scripts. They are correctness smoke tests, not ASR training, decode, speed, or
+multi-hardware measurements.
+
+| Smoke | Contract | Device in local run | `C` | Selected logp max abs | `logZ` max abs | Grad cosine | Persistent full logits | Persistent full `grad_logits` |
+|---|---|---:|---:|---:|---:|---:|---|---|
+| `minimal_selected_normalizer_smoke.py` | blank/target selected set | CUDA | 2048 | `9.54e-07` | `4.77e-07` | `1.0` | false | false |
+| `multiselected_parity_smoke.py` | synthetic `|S_i|=3..5` selected set | CUDA | 2048 | `9.54e-07` | `4.77e-07` | `1.0` | false | false |
 
 ## Method Boundary
 
