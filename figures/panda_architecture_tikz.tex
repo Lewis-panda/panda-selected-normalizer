@@ -1,0 +1,106 @@
+\begin{tikzpicture}[
+  x=1cm,
+  y=1cm,
+  font=\sffamily\footnotesize,
+  >=Latex,
+  line cap=round,
+  line join=round
+]
+\definecolor{pandaInk}{HTML}{334155}
+\definecolor{pandaMuted}{HTML}{64748B}
+\definecolor{pandaPanel}{HTML}{F8FAFC}
+\definecolor{pandaGreen}{HTML}{0F766E}
+\definecolor{pandaGreenLight}{HTML}{DDF4EE}
+\definecolor{pandaBlue}{HTML}{2563EB}
+\definecolor{pandaBlueLight}{HTML}{E7F2FF}
+\definecolor{pandaOrange}{HTML}{C2410C}
+\definecolor{pandaOrangeLight}{HTML}{FFF2E8}
+
+\tikzset{
+  block/.style={
+    rounded corners=5pt,
+    line width=0.8pt,
+    draw=pandaInk!55,
+    fill=white,
+    align=center,
+    minimum height=1.25cm,
+    inner sep=5pt
+  },
+  boundary/.style={
+    rounded corners=6pt,
+    line width=1.2pt,
+    draw=pandaGreen,
+    fill=pandaGreenLight,
+    align=center,
+    inner sep=6pt
+  },
+  backward/.style={
+    rounded corners=6pt,
+    line width=1.0pt,
+    draw=pandaBlue,
+    fill=pandaBlueLight,
+    align=center,
+    inner sep=5pt
+  },
+  note/.style={
+    rounded corners=4pt,
+    line width=0.7pt,
+    draw=pandaOrange,
+    fill=pandaOrangeLight,
+    align=center,
+    inner sep=4pt
+  },
+  fwd/.style={->, line width=1.05pt, draw=pandaInk},
+  sel/.style={->, line width=1.15pt, draw=pandaGreen},
+  bwd/.style={->, line width=1.05pt, draw=pandaBlue}
+}
+
+\path[use as bounding box] (0,0) rectangle (16,6.45);
+
+\node[anchor=west,font=\sffamily\bfseries\large,text=pandaInk]
+  at (0.15,6.15) {PANDA selected-normalization boundary};
+\node[anchor=west,font=\sffamily\scriptsize,text=pandaMuted]
+  at (0.15,5.82) {Forward exposes selected emissions; backward recomputes full-$C$ tiles transiently.};
+
+% Main forward path.
+\node[block,minimum width=2.45cm] (sites) at (1.55,4.35)
+  {\textbf{fixed sites}};
+
+\node[block,minimum width=2.15cm] (hidden) at (4.25,4.35)
+  {\textbf{hidden}\\[-1pt]$h_i$};
+
+\node[boundary,minimum width=4.25cm,minimum height=1.72cm] (panda) at (8.05,4.35)
+  {\textbf{PANDA boundary}\\[4pt]
+   full-$C$ $\log Z$\\[-1pt]
+   selected log-probs};
+
+\node[block,minimum width=2.65cm] (dp) at (13.45,4.35)
+  {\textbf{DP loss}\\[-1pt]blank/target};
+
+\draw[fwd] (sites.east) -- (hidden.west);
+\draw[fwd] (hidden.east) -- (panda.west);
+\draw[sel] (panda.east) -- node[above,font=\scriptsize,text=pandaGreen]
+  {selected} (dp.west);
+
+% Backward path.
+\node[backward,minimum width=4.25cm,minimum height=1.20cm] (back) at (8.05,1.75)
+  {\textbf{tile-local backward}\\[-1pt]
+   no persistent $[N,C]$ grad\_logits};
+
+\coordinate (adjA) at ($(dp.south)+(0,-0.55)$);
+\coordinate (adjB) at ($(back.east)+(0.70,0.70)$);
+\draw[bwd] (dp.south) -- (adjA) -- node[above,font=\scriptsize,text=pandaBlue]
+  {compact adjoints} (adjB) -- (back.east);
+\draw[bwd] (back.north) -- node[right,font=\scriptsize,text=pandaBlue]
+  {tiles} (panda.south);
+
+% Persistent-memory contrast.
+\node[note,minimum width=3.15cm] (nopersist) at (2.55,1.75)
+  {no persistent\\$[N,C]$ logits};
+\draw[bwd] (back.west) -- (nopersist.east);
+
+\node[block,minimum width=2.60cm,minimum height=0.78cm] (grads) at (13.45,1.75)
+  {$\nabla h_i,\ \nabla W,\ \nabla b$};
+\draw[bwd] (back.east) -- (grads.west);
+
+\end{tikzpicture}

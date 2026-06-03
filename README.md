@@ -11,6 +11,21 @@ The code in this draft repository is deliberately small. It is meant to help an
 external engineer understand and run the selected-normalizer boundary on random
 tensors without cloning the full research workspace.
 
+## Paper Draft
+
+The current public draft PDF is available at
+[`paper/panda-draft.pdf`](paper/panda-draft.pdf). It is included as a reference
+draft, not as a proceedings or accepted version.
+
+## Architecture Overview
+
+This schematic shows the selected-normalization boundary implemented by PANDA:
+the DP consumes compact selected emissions, while the backward pass recomputes
+full-`C` tiles transiently and avoids persistent `[N,C]` logits and full
+`grad_logits`.
+
+![PANDA selected-normalization architecture overview](figures/panda_architecture.png)
+
 ## Paper Result Figures
 
 These figures are copied from the paper artifact package. They summarize the
