@@ -1,5 +1,8 @@
 # PANDA
 
+Exact full-`C` selected normalization for transducer / RNN-T ASR training
+systems.
+
 PANDA is a research prototype for exact full-`C` selected normalization at
 structured-loss emission sites. Here `C` means output class count / vocabulary
 size.
