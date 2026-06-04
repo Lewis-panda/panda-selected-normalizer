@@ -1,172 +1,53 @@
 # PANDA
 
-Exact full-`C` selected normalization for transducer / RNN-T ASR training
-systems.
+**Exact full-`C` selected normalization for transducer / RNN-T ASR training systems.**
 
-PANDA is a research prototype for exact full-`C` selected normalization at
-structured-loss emission sites. Here `C` means output class count / vocabulary
-size.
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-2.0%2B-ee4c2c.svg)](https://pytorch.org/)
+[![License](https://img.shields.io/badge/License-Apache--2.0-yellow.svg)](LICENSE)
 
-The code in this draft repository is deliberately small. It is meant to help an
-external engineer understand and run the selected-normalizer boundary on random
-tensors without cloning the full research workspace.
+PANDA is a small research prototype for the selected-normalizer boundary in
+structured ASR losses. The point is simple:
 
-## Paper Draft
+> **RNN-T / transducer DP needs only selected blank/target emissions, but exact
+> full-`C` normalization still needs the denominator over every output class.**
 
-The current public draft PDF is available at
-[`paper/panda-draft.pdf`](paper/panda-draft.pdf). It is included as a reference
-draft, not as a proceedings or accepted version.
+PANDA computes that full-`C` denominator exactly while avoiding persistent
+`[N,C]` logits and full `grad_logits[N,C]`. Here `C` means output class count /
+vocabulary size.
 
-## Architecture Overview
+The repository is intentionally lightweight: it lets an external engineer run
+the selected-normalizer mechanism on random tensors without cloning the full
+research workspace.
 
-This schematic shows the selected-normalization boundary implemented by PANDA:
-the DP consumes compact selected emissions, while the backward pass recomputes
-full-`C` tiles transiently and avoids persistent `[N,C]` logits and full
-`grad_logits`.
+---
+
+## Key Findings
+
+These are paper-level systems results, included here to explain why the boundary
+is useful. The GitHub package does not re-run the full ASR experiments.
+
+| Question | Evidence | Result | Interpretation |
+|---|---|---:|---|
+| Does full-logit materialization hit a `C` wall? | Same-machine exact full-`C` C-sweep | materialized first OOM at `C=8192` | persistent `[N,C]` state is the pressure point |
+| Does selected normalization move that wall? | Same C-sweep | PANDA completes through `C=65536` | memory/OOM boundary moves along the output-class axis |
+| Is this exact full-`C`, not sampled softmax? | Dense-oracle parity + paper derivation | selected log-probs / `logZ` / gradients match within small numeric tolerances | denominator remains exact over all classes |
+| Does it enter real ASR training code? | AISHELL / WenetSpeech bounded routes | compute-loss / backward / bounded update contracts pass | integration evidence, not full-training ASR quality |
+| Does it compose with Pruned RNN-T? | retained-site composition rows | pruned `N` reduction and PANDA per-site `C` materialization reduction compose | orthogonal memory axes |
+
+**One-line takeaway:** PANDA isolates and removes a concrete materialization
+barrier for exact full-`C` transducer experiments. It is a systems mechanism,
+not an ASR accuracy recipe.
+
+---
+
+## Architecture
+
+PANDA sits between fixed full or retained transducer sites and the standard
+blank/target dynamic program. Forward exposes compact selected log-probabilities;
+backward recomputes full-`C` tiles transiently and accumulates exact gradients.
 
 ![PANDA selected-normalization architecture overview](figures/panda_architecture.png)
-
-## Paper Result Figures
-
-These figures are copied from the paper artifact package. They summarize the
-reported systems evidence; they are not re-run by this lightweight GitHub
-package.
-
-### Exact Full-C C-Scaling / OOM Boundary
-
-![Exact full-C C-scaling memory/OOM boundary](figures/main_c_scaling_memory.png)
-
-### Capacity Ceiling
-
-![Capacity ceiling summary](figures/capacity_ceiling.png)
-
-### AISHELL Bounded Continuation Memory / Time
-
-![AISHELL bounded-continuation memory and time](figures/h1_smoke_memory_time.png)
-
-### Pruned RNN-T Composition
-
-![Pruned RNN-T composition memory](figures/pruned_composition_memory.png)
-
-## What PANDA Is
-
-For each site `i`, PANDA computes selected log-probabilities such as blank and
-target emissions:
-
-```text
-logits_i[v] = h_i dot W[v] + b[v]
-logZ_i = logsumexp_v logits_i[v] over all C classes
-logp_i[s] = logits_i[s] - logZ_i for selected s in S_i
-```
-
-The denominator is exact over the full `C` classes. The smoke implementation
-scans `C` in tiles and recomputes tile logits in backward. It does not keep
-persistent full logits `[N,C]` and does not keep persistent full
-`grad_logits[N,C]`.
-
-## What PANDA Is Not
-
-This package is not a production/default ASR backend. It does not claim ASR
-quality, WER/CER preservation, full-training speedup, decode behavior, or
-multi-hardware generality. It is not sampled softmax, NCE, or an approximate
-denominator.
-
-The current package also does not claim production multi-blank or TDT support.
-The multi-selected example is a synthetic second-instance parity check for the
-selected-set algebra.
-
-## Quick Start
-
-Create a small smoke/test environment:
-
-```bash
-python -m venv .venv
-. .venv/bin/activate
-pip install -r requirements.txt
-scripts/run_smoke.sh
-```
-
-Use `python3` in place of `python` on systems that do not provide a `python`
-launcher.
-
-The package metadata also exposes equivalent extras:
-
-```bash
-pip install -e ".[test]"
-```
-
-If the current Python environment does not have `pytest`, the package smoke
-environment installs it through `requirements.txt` or `.[test]`; until then,
-`scripts/run_smoke.sh` falls back to the direct Python test runner.
-
-Known-good development stack used while drafting this package:
-
-```text
-Python 3.10
-PyTorch 2.10.0+cu130
-CUDA build 13.0
-```
-
-Fresh package validation also passed on Python 3.12 with the current PyPI
-`torch>=2.0` resolution (`torch 2.12.0+cu130`) using CPU smoke shapes.
-Installing PyTorch from PyPI on Linux may download CUDA runtime wheels even for
-CPU smoke tests; use a CPU-only PyTorch wheel/index if you need a smaller local
-environment.
-
-The examples also run on CPU for small shapes. CUDA is only needed if you want
-PyTorch CUDA peak allocated/reserved memory numbers.
-
-Triton is optional and is not part of the base smoke environment:
-
-```bash
-pip install -e ".[triton]"
-```
-
-The optional Triton boundary in this package is a placeholder for future
-packaged kernels, not a production/default backend.
-
-## Run Smoke
-
-```bash
-python examples/minimal_selected_normalizer_smoke.py
-python examples/multiselected_parity_smoke.py
-python -m pytest tests -q
-```
-
-or:
-
-```bash
-scripts/run_smoke.sh
-```
-
-## Expected Output
-
-The smoke scripts print:
-
-- selected log-probability max absolute error;
-- `logZ` max absolute error;
-- loss absolute/relative error;
-- `grad_hidden`, `grad_weight`, and `grad_bias` max_abs / rel_L2 / cosine;
-- PyTorch peak allocated/reserved MiB when CUDA is available;
-- `panda_persistent_full_logits=false`;
-- `panda_persistent_full_grad_logits=false`.
-
-The dense oracle intentionally materializes `[N,C]` logits and uses PyTorch
-autograd. The PANDA path uses tile-local logits and a manual compact-adjoint
-backward.
-
-### Smoke Result Snapshot
-
-These are representative small-shape parity checks from the package smoke
-scripts. They are correctness smoke tests, not ASR training, decode, speed, or
-multi-hardware measurements.
-
-| Smoke | Contract | Device in local run | `C` | Selected logp max abs | `logZ` max abs | Grad cosine | Persistent full logits | Persistent full `grad_logits` |
-|---|---|---:|---:|---:|---:|---:|---|---|
-| `minimal_selected_normalizer_smoke.py` | blank/target selected set | CUDA | 2048 | `9.54e-07` | `4.77e-07` | `1.0` | false | false |
-| `multiselected_parity_smoke.py` | synthetic `|S_i|=3..5` selected set | CUDA | 2048 | `9.54e-07` | `4.77e-07` | `1.0` | false | false |
-
-## Method Boundary
 
 The package boundary is:
 
@@ -181,26 +62,155 @@ selected_adjoints [N,S_max]
      grad_hidden [N,H], grad_weight [C,H], grad_bias [C]
 ```
 
-Here the selected-entry width is a compact per-site dimension, not vocabulary
-size and not a sampled-softmax sampled count. The output class count is always
-`C`.
+For standard transducer sites, `S_i={target_i, blank}`. Invalid target sites
+omit the target selected entry and use zero target adjoint.
 
-For standard RNN-T-style sites, `S_i={target_i, blank}`. Invalid target sites
-are omitted from the target selected entry and should have zero target adjoint.
+---
 
-For synthetic multi-selected sites, `|S_i|` can be greater than 2. Selected
-classes must be distinct within a site.
+## Figures
 
-## Integration Note
+These figures are copied from the paper artifact package. They summarize scoped
+systems evidence and are not generated by the lightweight smoke tests.
 
-In an RNN-T or k2/icefall integration, PANDA belongs at the selected-emission
-normalizer boundary after the structured loss or DP side has identified selected
-emissions and produced compact adjoints. Recipe logic, tokenizer semantics,
-retained-site pruning, decoding, and WER/CER evaluation remain outside this
-package.
+| Exact full-`C` C-scaling / OOM boundary | Capacity ceiling |
+|---|---|
+| ![Exact full-C C-scaling memory/OOM boundary](figures/main_c_scaling_memory.png) | ![Capacity ceiling summary](figures/capacity_ceiling.png) |
 
-See `docs/icefall_k2_integration_note.md` for a scoped integration sketch.
+| AISHELL bounded continuation memory / time | Pruned RNN-T composition |
+|---|---|
+| ![AISHELL bounded-continuation memory and time](figures/h1_smoke_memory_time.png) | ![Pruned RNN-T composition memory](figures/pruned_composition_memory.png) |
+
+The current public draft PDF is available at
+[`paper/panda-draft.pdf`](paper/panda-draft.pdf). It is a draft reference, not
+an accepted or proceedings version.
+
+---
+
+## Quickstart
+
+Create a small smoke/test environment:
+
+```bash
+python -m venv .venv
+. .venv/bin/activate
+pip install -r requirements.txt
+scripts/run_smoke.sh
+```
+
+Or install the test extra:
+
+```bash
+pip install -e ".[test]"
+python -m pytest tests -q
+```
+
+CPU smoke tests work for small shapes. CUDA is only needed if you want PyTorch
+peak allocated/reserved memory numbers.
+
+Known-good local development stack while drafting:
+
+```text
+Python 3.10
+PyTorch 2.10.0+cu130
+CUDA build 13.0
+```
+
+Fresh package validation also passed on Python 3.12 with the current PyPI
+`torch>=2.0` resolution using CPU smoke shapes.
+
+---
+
+## Smoke Output
+
+The smoke scripts compare the PANDA path against a dense full-`C` PyTorch
+autograd oracle. They print:
+
+| Quantity | Meaning |
+|---|---|
+| selected log-probability max absolute error | forward selected-emission parity |
+| `logZ` max absolute error | exact full-`C` denominator parity |
+| loss absolute / relative error | compact selected-adjoint objective check |
+| `grad_hidden`, `grad_weight`, `grad_bias` max_abs / rel_L2 / cosine | backward parity |
+| PyTorch peak allocated/reserved MiB | CUDA memory smoke, when CUDA is available |
+| `panda_persistent_full_logits=false` | no persistent full `[N,C]` logits |
+| `panda_persistent_full_grad_logits=false` | no persistent full `grad_logits[N,C]` |
+
+Representative local CUDA smoke snapshot:
+
+| Smoke | Contract | `C` | Selected logp max abs | `logZ` max abs | Grad cosine | Persistent full logits | Persistent full `grad_logits` |
+|---|---|---:|---:|---:|---:|---|---|
+| `minimal_selected_normalizer_smoke.py` | blank/target selected set | 2048 | `9.54e-07` | `4.77e-07` | `1.0` | false | false |
+| `multiselected_parity_smoke.py` | synthetic `|S_i|=3..5` selected set | 2048 | `9.54e-07` | `4.77e-07` | `1.0` | false | false |
+
+---
+
+## Repository Layout
+
+```text
+PANDA/
+├── panda/
+│   ├── selected_normalizer.py   # tiled exact full-C selected normalizer
+│   ├── reference.py             # dense full-C oracle helpers
+│   └── triton_kernels.py        # optional placeholder, not default backend
+├── examples/
+│   ├── minimal_selected_normalizer_smoke.py
+│   └── multiselected_parity_smoke.py
+├── tests/
+│   └── test_selected_normalizer_parity.py
+├── docs/
+│   ├── method_boundary.md
+│   ├── icefall_k2_integration_note.md
+│   └── limitations.md
+├── figures/                     # paper figures copied into the package
+├── paper/
+│   └── panda-draft.pdf
+├── scripts/run_smoke.sh
+├── pyproject.toml
+├── environment.yml
+└── requirements.txt
+```
+
+---
+
+## What PANDA Is
+
+For each site `i`, PANDA computes selected log-probabilities:
+
+```text
+logits_i[v] = h_i dot W[v] + b[v]
+logZ_i = logsumexp_v logits_i[v] over all C classes
+logp_i[s] = logits_i[s] - logZ_i for selected s in S_i
+```
+
+The denominator is exact over all `C` classes. The implementation scans `C` in
+tiles and recomputes tile logits in backward. It never keeps persistent full
+logits `[N,C]` or persistent full `grad_logits[N,C]`.
+
+In an RNN-T or k2/icefall integration, PANDA belongs after the structured loss
+or DP side has identified selected emissions and produced compact adjoints.
+Recipe logic, tokenizer semantics, retained-site pruning, decoding, and WER/CER
+evaluation remain outside this package.
+
+See [`docs/method_boundary.md`](docs/method_boundary.md) and
+[`docs/icefall_k2_integration_note.md`](docs/icefall_k2_integration_note.md).
+
+---
+
+## Scope
+
+This package is **not** a production/default ASR backend. It does not claim:
+
+- ASR quality improvement;
+- WER/CER preservation beyond the bounded paper checks;
+- full-training speedup;
+- decode behavior;
+- multi-hardware generality;
+- sampled-softmax or approximate-denominator behavior;
+- production multi-blank or TDT support.
+
+The multi-selected example is a synthetic second-instance parity check for the
+selected-set algebra, not production multi-blank support.
 
 ## License
 
-This package is released under the Apache License 2.0. See `LICENSE`.
+Apache License 2.0. See [`LICENSE`](LICENSE).
